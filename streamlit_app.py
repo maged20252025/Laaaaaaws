@@ -1,4 +1,3 @@
-
 import streamlit as st
 import streamlit.components.v1 as components
 from docx import Document
@@ -56,18 +55,22 @@ def run_main_app():
     <button class='scroll-btn' id='scroll-bottom-btn' onclick='window.scrollTo({top: document.body.scrollHeight, behavior: "smooth"});'>⬇️</button>
     """, height=1)
 
-    subfolders = [f.path for f in os.scandir() if f.is_dir()]
+    subfolders = [f.path for f in os.scandir() if f.is_dir() and f.name not in [".git", ".streamlit"]]
     if not subfolders:
         st.warning("📂 لا توجد مجلدات قوانين.")
         return
 
-    selected_folder = st.selectbox("اختر مجلدًا للبحث فيه:", subfolders)
-    files = [f for f in os.listdir(selected_folder) if f.endswith(".docx")]
-    if not files:
-        st.warning("📂 لا توجد ملفات Word في هذا المجلد.")
-        return
+    selected_folder = st.selectbox("اختر مجلدًا للبحث فيه:", ["🔍 كل المجلدات"] + subfolders)
 
-    selected_file = st.selectbox("اختر قانونًا أو 'الكل' للبحث في الجميع", ["الكل"] + files)
+    all_files = {}
+    if selected_folder == "🔍 كل المجلدات":
+        for folder in subfolders:
+            files = [f for f in os.listdir(folder) if f.endswith(".docx")]
+            all_files[folder] = files
+    else:
+        files = [f for f in os.listdir(selected_folder) if f.endswith(".docx")]
+        all_files[selected_folder] = files
+
     keywords = st.text_area("الكلمات المفتاحية (افصل بفاصلة)", "")
 
     if "results" not in st.session_state:
@@ -78,43 +81,43 @@ def run_main_app():
     if st.button("🔍 بدء البحث") and keywords:
         kw_list = [k.strip() for k in keywords.split(",") if k.strip()]
         results = []
-        search_files = files if selected_file == "الكل" else [selected_file]
 
-        for file in search_files:
-            doc = Document(os.path.join(selected_folder, file))
-            law_name = file.replace(".docx", "")
-            last_article = "غير معروفة"
-            current_article = []
-            for para in doc.paragraphs:
-                txt = para.text.strip()
-                if not txt:
-                    continue
-                match = re.match(r"مادة\s*\(?\s*(\d+)\)?", txt)
-                if match:
-                    if current_article:
-                        full_text = "\n".join(current_article)
-                        if any(kw in full_text for kw in kw_list):
-                            highlighted = highlight_keywords(full_text, kw_list)
-                            results.append({
-                                "law": law_name,
-                                "num": last_article,
-                                "text": highlighted,
-                                "plain": full_text
-                            })
-                        current_article = []
-                    last_article = match.group(1)
-                current_article.append(txt)
+        for folder, files in all_files.items():
+            for file in files:
+                doc = Document(os.path.join(folder, file))
+                law_name = file.replace(".docx", "")
+                last_article = "غير معروفة"
+                current_article = []
+                for para in doc.paragraphs:
+                    txt = para.text.strip()
+                    if not txt:
+                        continue
+                    match = re.match(r"مادة\s*?\s*(\d+)?", txt)
+                    if match:
+                        if current_article:
+                            full_text = "\n".join(current_article)
+                            if any(kw in full_text for kw in kw_list):
+                                highlighted = highlight_keywords(full_text, kw_list)
+                                results.append({
+                                    "law": law_name,
+                                    "num": last_article,
+                                    "text": highlighted,
+                                    "plain": full_text
+                                })
+                            current_article = []
+                        last_article = match.group(1)
+                    current_article.append(txt)
 
-            if current_article:
-                full_text = "\n".join(current_article)
-                if any(kw in full_text for kw in kw_list):
-                    highlighted = highlight_keywords(full_text, kw_list)
-                    results.append({
-                        "law": law_name,
-                        "num": last_article,
-                        "text": highlighted,
-                        "plain": full_text
-                    })
+                if current_article:
+                    full_text = "\n".join(current_article)
+                    if any(kw in full_text for kw in kw_list):
+                        highlighted = highlight_keywords(full_text, kw_list)
+                        results.append({
+                            "law": law_name,
+                            "num": last_article,
+                            "text": highlighted,
+                            "plain": full_text
+                        })
 
         st.session_state.results = results
         st.session_state.search_done = True
