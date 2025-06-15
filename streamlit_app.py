@@ -28,21 +28,17 @@ def activate_app(code):
     return False
 
 def highlight_keywords(text, keywords):
-    # التأكد من أن النص هو من نوع string
     text = str(text)
+    # تنظيف النص من المحارف التي قد تسبب مشاكل في العرض أو البحث
+    text = text.replace('\xa0', ' ').replace('\u200b', '') 
+    
     for kw in keywords:
-        # استخدام re.escape للتأكد من التعامل الصحيح مع المحارف الخاصة في الكلمات المفتاحية
-        # استخدام re.IGNORECASE للبحث غير الحساس لحالة الأحرف
-        # استخدام re.UNICODE لضمان التعامل الصحيح مع محارف Unicode (مثل العربية)
         text = re.sub(f"({re.escape(kw)})", r"<mark>\1</mark>", text, flags=re.IGNORECASE | re.UNICODE)
     return text
 
-def extract_context(paragraphs, keywords, context_lines=5):
-    # التأكد من أن المدخلات هي قائمة من النصوص
-    paragraphs = [str(p) for p in paragraphs]
+def extract_context(paragraphs, keywords, context_lines=3): # تم التعديل هنا: 5 -> 3
+    paragraphs = [str(p).replace('\xa0', ' ').replace('\u200b', '') for p in paragraphs] # تنظيف الفقرات
     
-    # تحويل الكلمات المفتاحية إلى صيغة قابلة للبحث بـ regex
-    # استخدام re.UNICODE هنا أيضًا
     search_pattern = re.compile('|'.join([re.escape(kw) for kw in keywords]), re.IGNORECASE | re.UNICODE)
     
     matched_indexes = []
@@ -52,11 +48,9 @@ def extract_context(paragraphs, keywords, context_lines=5):
             
     context_set = set()
     for idx in matched_indexes:
-        # هنا سنعدل لزيادة السياق إلى 5 أسطر قبل و 5 أسطر بعد
         for i in range(max(0, idx - context_lines), min(len(paragraphs), idx + context_lines + 1)):
             context_set.add(i)
             
-    # تصفية الفقرات الفارغة أو المسافات البيضاء
     filtered_paragraphs = [paragraphs[i] for i in sorted(context_set) if paragraphs[i].strip()]
     return "\n".join(filtered_paragraphs)
 
@@ -143,7 +137,7 @@ def run_main_app():
                         if current_article_paragraphs:
                             full_article_text = "\n".join(current_article_paragraphs)
                             if any(kw.lower() in full_article_text.lower() for kw in kw_list):
-                                context = extract_context(current_article_paragraphs, kw_list, context_lines=5)
+                                context = extract_context(current_article_paragraphs, kw_list, context_lines=3) # تم التعديل هنا
                                 results.append({
                                     "law": law_name,
                                     "num": last_article_num,
@@ -161,7 +155,7 @@ def run_main_app():
                 if current_article_paragraphs:
                     full_article_text = "\n".join(current_article_paragraphs)
                     if any(kw.lower() in full_article_text.lower() for kw in kw_list):
-                        context = extract_context(current_article_paragraphs, kw_list, context_lines=5)
+                        context = extract_context(current_article_paragraphs, kw_list, context_lines=3) # تم التعديل هنا
                         results.append({
                             "law": law_name,
                             "num": last_article_num,
@@ -204,7 +198,6 @@ def run_main_app():
                 )
 
 def main():
-    # تهيئة حالة التفعيل عند بداية التطبيق
     if "activated" not in st.session_state:
         st.session_state.activated = is_activated()
 
@@ -217,8 +210,6 @@ def main():
                 if code and activate_app(code.strip()):
                     st.success("✅ تم التفعيل بنجاح! يرجى تحديث الصفحة أو إعادة تشغيل التطبيق لتطبيق التغييرات.")
                     st.session_state.activated = True
-                    # لا نستخدم st.experimental_rerun() هنا مباشرةً لتجنب الخطأ
-                    # بدلاً من ذلك، نعتمد على أن Streamlit سيعيد الرسم في الدورة التالية
                 else:
                     st.error("❌ كود التفعيل غير صحيح أو انتهى.")
         with col2:
@@ -226,15 +217,12 @@ def main():
                 if st.button("🕒 بدء التجربة المجانية", key="start_trial_button"):
                     st.session_state.trial_start = time.time()
                     st.success("🎉 بدأت النسخة التجريبية. لديك ساعة واحدة. يرجى تحديث الصفحة أو إعادة تشغيل التطبيق.")
-                    # لا نستخدم st.experimental_rerun() هنا مباشرةً لتجنب الخطأ
             elif time.time() - st.session_state.trial_start < 3600:
                 st.info(f"✅ النسخة التجريبية نشطة. تبقى لديك حوالي {int((3600 - (time.time() - st.session_state.trial_start)) / 60)} دقيقة.")
-                # هنا يجب أن يعرض run_main_app()
                 run_main_app()
             else:
                 st.error("❌ انتهت مدة التجربة المجانية. يرجى التفعيل.")
     else:
-        # إذا كان التطبيق مفعلًا، قم بتشغيل التطبيق الرئيسي
         run_main_app()
 
 main()
