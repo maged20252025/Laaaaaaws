@@ -66,11 +66,8 @@ def export_results_to_docx(results, filename="نتائج_البحث.docx"):
     doc.add_heading("نتائج البحث", 0)
     for r in results:
         doc.add_heading(f'{r["law"]} - المادة {r["num"]}', level=1)
-        doc.add_paragraph(r["context"]) # يمكننا استخدام 'context' هنا لأنه يمثل النص المستخرج
-    # التأكد من وجود المجلد '/mnt/data/' إذا كنت تستخدم بيئة Docker (مثل Streamlit Cloud)
-    # وإلا استخدم os.path.join(os.getcwd(), filename) لحفظه في نفس مجلد التطبيق
-    # للبيئة المحلية، يمكن استخدام:
-    filepath = os.path.join(os.getcwd(), filename) # سيتم حفظه في نفس مجلد تشغيل التطبيق
+        doc.add_paragraph(r["context"])
+    filepath = os.path.join(os.getcwd(), filename)
     doc.save(filepath)
     return filepath
 
@@ -135,26 +132,18 @@ def run_main_app():
 
                 law_name = file.replace(".docx", "")
                 
-                # تخزين جميع فقرات الوثيقة لمعالجتها كوحدة واحدة للبحث عن المادة
                 all_paragraphs_in_doc = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
                 
-                # تحديد المادة الحالية والنص الخاص بها
                 current_article_paragraphs = []
                 last_article_num = "غير معروفة"
 
-                # مراجعة جميع الفقرات في المستند
                 for i, para_text in enumerate(all_paragraphs_in_doc):
                     match = re.match(r"مادة\s*\(?\s*(\d+)\)?", para_text)
                     if match:
-                        # إذا وجدنا مادة جديدة
                         if current_article_paragraphs:
-                            # قبل البدء في المادة الجديدة، نقوم بمعالجة المادة السابقة
                             full_article_text = "\n".join(current_article_paragraphs)
-                            # البحث عن الكلمات المفتاحية في كامل نص المادة
                             if any(kw.lower() in full_article_text.lower() for kw in kw_list):
-                                # استخراج السياق من كل فقرات المادة الحالية
-                                # تمرير الفقرات الأصلية وليس full_article_text للحفاظ على الفواصل
-                                context = extract_context(current_article_paragraphs, kw_list, context_lines=5) # تم تعديل هنا
+                                context = extract_context(current_article_paragraphs, kw_list, context_lines=5)
                                 results.append({
                                     "law": law_name,
                                     "num": last_article_num,
@@ -163,17 +152,16 @@ def run_main_app():
                                     "context": context,
                                     "keywords": kw_list
                                 })
-                            current_article_paragraphs = [] # تفريغ لمادة جديدة
-                        last_article_num = match.group(1) # تحديث رقم المادة
-                        current_article_paragraphs.append(para_text) # إضافة سطر المادة نفسه
+                            current_article_paragraphs = []
+                        last_article_num = match.group(1)
+                        current_article_paragraphs.append(para_text)
                     else:
                         current_article_paragraphs.append(para_text)
                 
-                # معالجة آخر مادة في المستند بعد انتهاء الحلقة
                 if current_article_paragraphs:
                     full_article_text = "\n".join(current_article_paragraphs)
                     if any(kw.lower() in full_article_text.lower() for kw in kw_list):
-                        context = extract_context(current_article_paragraphs, kw_list, context_lines=5) # تم تعديل هنا
+                        context = extract_context(current_article_paragraphs, kw_list, context_lines=5)
                         results.append({
                             "law": law_name,
                             "num": last_article_num,
@@ -191,11 +179,9 @@ def run_main_app():
         unique_laws = sorted(set(r["law"] for r in results))
         st.success(f"تم العثور على {len(results)} نتيجة في {len(unique_laws)} قانون/ملف.")
         
-        # إضافة خيار 'الكل' في الفلترة حسب القانون
         selected_law = st.selectbox("فلترة حسب القانون", ["الكل"] + unique_laws)
         filtered = results if selected_law == "الكل" else [r for r in results if r["law"] == selected_law]
 
-        # عرض النتائج
         for r in filtered:
             st.markdown(f"""
 <div style="background-color:#f1f8e9;padding:15px;margin-bottom:15px;border-radius:10px;
@@ -218,30 +204,37 @@ def run_main_app():
                 )
 
 def main():
-    if not is_activated():
+    # تهيئة حالة التفعيل عند بداية التطبيق
+    if "activated" not in st.session_state:
+        st.session_state.activated = is_activated()
+
+    if not st.session_state.activated:
         st.warning("⚠️ التطبيق غير مفعل. يرجى التفعيل أو استخدام النسخة التجريبية.")
         col1, col2 = st.columns(2)
         with col1:
-            code = st.text_input("أدخل كود التفعيل هنا", key="activation_code_input") # إضافة مفتاح فريد
-            if st.button("🔐 تفعيل التطبيق", key="activate_button"): # إضافة مفتاح فريد
+            code = st.text_input("أدخل كود التفعيل هنا", key="activation_code_input")
+            if st.button("🔐 تفعيل التطبيق", key="activate_button"):
                 if code and activate_app(code.strip()):
-                    st.success("✅ تم التفعيل بنجاح! يرجى إعادة تشغيل التطبيق لتطبيق التغييرات.")
-                    st.session_state.activated = True # تحديث حالة التفعيل في الجلسة
-                    st.experimental_rerun() # إعادة تشغيل التطبيق
+                    st.success("✅ تم التفعيل بنجاح! يرجى تحديث الصفحة أو إعادة تشغيل التطبيق لتطبيق التغييرات.")
+                    st.session_state.activated = True
+                    # لا نستخدم st.experimental_rerun() هنا مباشرةً لتجنب الخطأ
+                    # بدلاً من ذلك، نعتمد على أن Streamlit سيعيد الرسم في الدورة التالية
                 else:
                     st.error("❌ كود التفعيل غير صحيح أو انتهى.")
         with col2:
             if "trial_start" not in st.session_state:
-                if st.button("🕒 بدء التجربة المجانية", key="start_trial_button"): # إضافة مفتاح فريد
+                if st.button("🕒 بدء التجربة المجانية", key="start_trial_button"):
                     st.session_state.trial_start = time.time()
-                    st.success("🎉 بدأت النسخة التجريبية. لديك ساعة واحدة.")
-                    st.experimental_rerun() # إعادة تشغيل لعرض التطبيق
+                    st.success("🎉 بدأت النسخة التجريبية. لديك ساعة واحدة. يرجى تحديث الصفحة أو إعادة تشغيل التطبيق.")
+                    # لا نستخدم st.experimental_rerun() هنا مباشرةً لتجنب الخطأ
             elif time.time() - st.session_state.trial_start < 3600:
                 st.info(f"✅ النسخة التجريبية نشطة. تبقى لديك حوالي {int((3600 - (time.time() - st.session_state.trial_start)) / 60)} دقيقة.")
+                # هنا يجب أن يعرض run_main_app()
                 run_main_app()
             else:
                 st.error("❌ انتهت مدة التجربة المجانية. يرجى التفعيل.")
     else:
+        # إذا كان التطبيق مفعلًا، قم بتشغيل التطبيق الرئيسي
         run_main_app()
 
 main()
